@@ -80,7 +80,7 @@ class Sphere {
 
 		Sphere(Vec3 const & center, float radius, Vec3 const & color);
 
-		std::tuple<double, double, double, double> wasHit(Ray const & ray);
+		std::tuple<double, double, double> wasHit(Ray const & ray);
 };
 
 class DisplayWindow {
@@ -95,7 +95,7 @@ class DisplayWindow {
 		int width {500};
 		int height {500};
 
-	DisplayWindow();
+	DisplayWindow(int height, int width);
 
 	void render(unsigned char * data);
 
