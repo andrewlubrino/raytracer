@@ -37,6 +37,10 @@ class Vec3 {
 
 		Vec3 clamp(double min, double max);
 
+		static Vec3 random(double min, double max);
+
+		static Vec3 randomInUnitSphere();
+
 		void print();
 
 		float x { 0.0 };
@@ -62,8 +66,6 @@ class Ray {
 		Ray(Vec3 const & origin, Vec3 const & direction);
 
 		Vec3 getPoint(double t);
-
-		void setTBounds(Scene & scene);
 };
 
 class Sphere {
@@ -80,7 +82,7 @@ class Sphere {
 
 		Sphere(Vec3 const & center, float radius, Vec3 const & color);
 
-		std::tuple<double, double, double> wasHit(Ray const & ray);
+		std::tuple<double*, Vec3*> wasHit(Ray & ray);
 };
 
 class DisplayWindow {
@@ -112,12 +114,13 @@ class Scene {
 		double focalLength;
 		int sampleRate;
 		Vec3 camera;
+		int recursionDepth;
 		
-		Scene(int height, double viewportHeight, double focalLength, double aspectRatio, int sampleRate);
+		Scene(int height, double viewportHeight, double focalLength, double aspectRatio, int sampleRate, int recursionDepth);
 
 		void add(Sphere const &  sphere);
 
-		Vec3 getRayColor(Ray & ray);
+		Vec3 getRayColor(Ray & ray, int recursionDepth);
 
 		void render();
 

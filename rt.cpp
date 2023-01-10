@@ -8,6 +8,11 @@
 #include <tuple>
 #include "rt.h"
 
+using std::sqrt;
+using std::get;
+using std::tuple;
+using std::make_tuple;
+
 class Util {
 
 	public:
@@ -16,6 +21,11 @@ class Util {
 			static std::uniform_real_distribution<double> distribution(0.0, 1.0);
 			static std::mt19937 generator;
 			return distribution(generator);
+		}
+
+		static inline double randomDouble(double min, double max) {
+			
+			return min + (max-min)*randomDouble();
 		}	
 
 };
@@ -110,7 +120,7 @@ float Vec3::length(){
 
 		len = new float;
 
-		*len = std::sqrt(Vec3::dot(*this, *this));
+		*len = sqrt(Vec3::dot(*this, *this));
 
 		return *len;
 
@@ -146,6 +156,24 @@ Vec3 Vec3::clamp(double min, double max){
 
 }
 
+Vec3 Vec3::random(double min, double max){
+
+	return Vec3(Util::randomDouble(min, max), Util::randomDouble(min, max),Util::randomDouble(min, max));
+
+}
+
+Vec3 Vec3::randomInUnitSphere(){
+
+	while(true){
+
+		Vec3 p = Vec3::random(-1,1);
+        if (p.length() * p.length() >= 1) continue;
+        return p;
+
+	}
+
+}
+
 void Vec3::print(){
 	printf("%.1f %.1f %.1f\n", x, y, z);
 }
@@ -160,19 +188,11 @@ Vec3 Ray::getPoint(double t){
 
 }
 
-void Ray::setTBounds(Scene & scene) {
-
-	tMin = scene.camera.z;
-
-	tMax = -scene.focalLength / direction.z;
-
-}
-
 Sphere::Sphere(){}
 
 Sphere::Sphere(Vec3 const & center, float radius, Vec3 const & color): center(center), radius(radius), color(color) {}
 
-std::tuple<double, double, double> Sphere::wasHit(Ray const & ray) {
+tuple<double*, Vec3*> Sphere::wasHit(Ray & ray) {
 
 	Vec3 aMinC = ray.origin - (this -> center);
 	
@@ -184,18 +204,33 @@ std::tuple<double, double, double> Sphere::wasHit(Ray const & ray) {
 
 	double discriminant = std::pow(b, 2) - 4 * a * c;
 
-	std::tuple <double, double, double> solutions = std::make_tuple(discriminant, a, b);
+	double * t = nullptr;
+
+	Vec3 * normal = nullptr;
+
+	if (discriminant >= 0) {
+
+		t = new double(-b - sqrt(discriminant) / (2 * a));
+
+		Vec3 point = ray.getPoint(*t);
+
+		normal = new Vec3((point - this->center).normalize());
+
+	}
+
+	tuple <double*, Vec3*> solutions = make_tuple(t, normal);
 
 	return solutions;
 }
 
 		
-Scene::Scene(int height, double viewportHeight, double focalLength, double aspectRatio, int sampleRate): 
+Scene::Scene(int height, double viewportHeight, double focalLength, double aspectRatio, int sampleRate, int recursionDepth): 
 	height(height), 
 	viewportHeight(viewportHeight), 
 	focalLength(focalLength),
 	aspectRatio(aspectRatio),
-	sampleRate(sampleRate) {
+	sampleRate(sampleRate),
+	recursionDepth(recursionDepth) {
 
 		horizontal = Vec3(viewportHeight * aspectRatio,0,0);
 
@@ -212,46 +247,61 @@ void Scene::add(Sphere const &  sphere) {
 
 }
 
-Vec3 Scene::getRayColor(Ray & ray){
+Vec3 Scene::getRayColor(Ray & ray, int recursionDepth){
 
-	double * smallestT = nullptr;
+	if (recursionDepth > 0){
 
-	Vec3 closestColor = Vec3(255, 255, 255);
+		double * smallestT = nullptr;
 
-	for(Sphere item: items){
+		tuple<double*, Vec3*> hitRecord;
 
-		ray.setTBounds(*this);
+		// Vec3 closestColor = Vec3(255, 255, 255);
 
-		std::tuple<double, double, double> hitRecord = item.wasHit(ray);
+		Vec3 * normal = nullptr;
 
-		if (std::get<0>(hitRecord) >= 0) {
+		for(Sphere item: items){
 
-			double a = std::get<1>(hitRecord);
+			hitRecord = item.wasHit(ray);
 
-			double b = std::get<2>(hitRecord);
+			if (get<0>(hitRecord) != nullptr) {
 
-			double t = (-b - std::sqrt(std::get<0>(hitRecord))) / (2 * a);
+				if (*get<0>(hitRecord) > 0) {
 
-			if (t >= ray.tMin && t <= ray.tMax) {
+					if (smallestT == nullptr) {
 
-				if (smallestT == nullptr) {
+						smallestT = get<0>(hitRecord);
 
-					smallestT = new double(t);
+						normal = get<1>(hitRecord);
 
-					closestColor = item.color;
+					} else if (*get<0>(hitRecord) < (*smallestT)) {
 
-				} else if (t < *smallestT) {
+						smallestT = get<0>(hitRecord);
 
-					*smallestT = t;
+						normal = get<1>(hitRecord);
 
-					closestColor = item.color;
-
+					}
 				}
 			}
 		}
+
+		if (smallestT == nullptr){
+
+			return Vec3(255, 255, 255);
+
+		} else {
+
+			Vec3 hitPoint = ray.getPoint(*smallestT);
+
+			Vec3 target = hitPoint + *normal + Vec3::randomInUnitSphere();
+
+			Ray newRay = Ray(hitPoint, target - hitPoint);
+
+			return (this->getRayColor(newRay, recursionDepth - 1)) * 0.5;
+
+		}
 	}
 
-	return closestColor;
+	return Vec3(255, 255, 255);
 }
 
 void Scene::render(){
@@ -274,7 +324,7 @@ void Scene::render(){
 
 				Ray ray(camera, upperLeft + (horizontal * u) - (vertical * v) - camera);
 
-				resultVec += getRayColor(ray);
+				resultVec += getRayColor(ray, this->recursionDepth);
 			}
 
 			resultVec /= sampleRate;
@@ -341,7 +391,7 @@ void DisplayWindow::render(unsigned char * data){
 
 int main() {
 
-	Scene scene(500, 2.0, 1.0, 16.0 / 9.0, 1);
+	Scene scene(500, 2.0, 1.0, 16.0 / 9.0, 50, 5);
 
 	Sphere sphere1(Vec3(0,0,-1), 0.5, Vec3(255,0,0));
 
